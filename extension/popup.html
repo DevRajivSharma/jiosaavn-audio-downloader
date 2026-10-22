@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <style>
     body {
-      width: 230px;
+      width: 250px;
       margin: 0;
       padding: 16px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -14,9 +14,34 @@
     }
     h3 {
       margin: 0 0 12px 0;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
-      letter-spacing: 0.3px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #94a3b8;
+    }
+    .track-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 12px;
+    }
+    .track-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f1f5f9;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .track-artist {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     #download-btn {
       width: 100%;
@@ -35,7 +60,7 @@
     }
     #download-btn:disabled {
       background-color: #334155;
-      color: #94a3b8;
+      color: #64748b;
       cursor: not-allowed;
     }
     #status {
@@ -43,14 +68,22 @@
       font-size: 11px;
       line-height: 1.4;
       color: #94a3b8;
+      text-align: center;
       word-break: break-word;
     }
   </style>
 </head>
 <body>
-  <h3>JioSaavn Grabber</h3>
-  <button id="download-btn" disabled>Download Song</button>
-  <div id="status">Play a track on JioSaavn first...</div>
+  <h3>JioSaavn Downloader</h3>
+  
+  <div class="track-card">
+    <div class="track-title" id="display-title">No track detected</div>
+    <div class="track-artist" id="display-artist">Play music on JioSaavn</div>
+  </div>
+
+  <button id="download-btn" disabled>Download Track</button>
+  <div id="status">Waiting for audio playback...</div>
+  
   <script src="popup.js"></script>
 </body>
 </html>

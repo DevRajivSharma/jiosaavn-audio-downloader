@@ -1,4 +1,3 @@
-// Rule: Ensure all fetch requests carry Referer: https://www.jiosaavn.com/
 chrome.runtime.onInstalled.addListener(() => {
   chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: [1001],
@@ -25,15 +24,34 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-let latestAudioUrl = null;
+let currentTrack = {
+  url: null,
+  title: null,
+  artist: null
+};
 
-// Intercept Saavn media CDN stream URLs without auto-downloading
+// Catch stream requests and fetch track details from the JioSaavn tab
 chrome.webRequest.onBeforeRequest.addListener(
-  (details) => {
+  async (details) => {
     const url = details.url;
     if (url.includes(".mp4") && url.includes("saavncdn.com")) {
-      latestAudioUrl = url;
-      console.log("[JioSaavn Downloader] Track URL ready:", latestAudioUrl);
+      currentTrack.url = url;
+
+      // Query open JioSaavn tabs to get active song info
+      try {
+        const tabs = await chrome.tabs.query({ url: "*://www.jiosaavn.com/*" });
+        if (tabs.length > 0) {
+          const tabId = details.tabId > 0 ? details.tabId : tabs[0].id;
+          chrome.tabs.sendMessage(tabId, { action: "get_track_meta" }, (res) => {
+            if (!chrome.runtime.lastError && res) {
+              currentTrack.title = res.title;
+              currentTrack.artist = res.artist;
+            }
+          });
+        }
+      } catch (e) {
+        console.warn("Could not query tab metadata:", e);
+      }
     }
   },
   {
@@ -41,29 +59,32 @@ chrome.webRequest.onBeforeRequest.addListener(
   }
 );
 
-// Handle download requests initiated from the popup button
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "get_status") {
-    sendResponse({ hasTrack: Boolean(latestAudioUrl), url: latestAudioUrl });
+    sendResponse({
+      hasTrack: Boolean(currentTrack.url),
+      title: currentTrack.title || "Track Captured",
+      artist: currentTrack.artist || ""
+    });
     return false;
   }
 
   if (message.action === "download_now") {
-    if (!latestAudioUrl) {
-      sendResponse({ success: false, error: "No song stream detected yet. Play a song first!" });
+    if (!currentTrack.url) {
+      sendResponse({ success: false, error: "No track stream detected." });
       return false;
     }
 
-    fetchAndSaveMP4(latestAudioUrl)
+    fetchAndSaveMP4(currentTrack)
       .then(() => sendResponse({ success: true }))
       .catch((err) => sendResponse({ success: false, error: err.message }));
 
-    return true; // Keeps channel open for async response
+    return true;
   }
 });
 
-async function fetchAndSaveMP4(url) {
-  const response = await fetch(url, {
+async function fetchAndSaveMP4(track) {
+  const response = await fetch(track.url, {
     method: "GET",
     headers: {
       Referer: "https://www.jiosaavn.com/"
@@ -99,8 +120,18 @@ async function fetchAndSaveMP4(url) {
   const base64Data = uint8ArrayToBase64(bytes);
   const dataUrl = `data:audio/mp4;base64,${base64Data}`;
 
-  const pathname = new URL(url).pathname;
-  const fileName = pathname.substring(pathname.lastIndexOf("/") + 1) || "song.mp4";
+  // Build clean filename: "Artist - Title.mp4" or "Title.mp4"
+  let fileName = "";
+  if (track.artist && track.title) {
+    fileName = `${track.artist} - ${track.title}`;
+  } else if (track.title) {
+    fileName = track.title;
+  } else {
+    fileName = "JioSaavn_Track";
+  }
+
+  // Strip forbidden filename characters
+  fileName = fileName.replace(/[\\/:*?"<>|]/g, "").trim() + ".mp4";
 
   return new Promise((resolve, reject) => {
     chrome.downloads.download({

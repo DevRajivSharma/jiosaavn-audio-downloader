@@ -1,16 +1,24 @@
 {
   "manifest_version": 3,
   "name": "JioSaavn MP4 Downloader",
-  "version": "1.2",
-  "description": "Captures Saavn stream and lets you download via a popup button.",
+  "version": "1.3",
+  "description": "Downloads full JioSaavn songs with genuine track titles and artist names.",
   "permissions": [
     "webRequest",
     "downloads",
-    "declarativeNetRequest"
+    "declarativeNetRequest",
+    "tabs"
   ],
   "host_permissions": [
     "*://*.saavncdn.com/*",
     "*://www.jiosaavn.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://www.jiosaavn.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
   ],
   "background": {
     "service_worker": "background.js"

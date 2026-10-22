@@ -1,15 +1,22 @@
 const downloadBtn = document.getElementById("download-btn");
+const displayTitle = document.getElementById("display-title");
+const displayArtist = document.getElementById("display-artist");
 const statusDiv = document.getElementById("status");
 
-// Check if a song stream is currently available
+// Query current track info from background worker
 chrome.runtime.sendMessage({ action: "get_status" }, (response) => {
   if (response?.hasTrack) {
+    displayTitle.textContent = response.title || "Unknown Track";
+    displayArtist.textContent = response.artist || "JioSaavn Stream";
+    
     downloadBtn.disabled = false;
-    statusDiv.textContent = "Track captured and ready to download.";
+    statusDiv.textContent = "Ready to download!";
     statusDiv.style.color = "#4ade80";
   } else {
     downloadBtn.disabled = true;
-    statusDiv.textContent = "No audio detected. Start playing a song on JioSaavn.";
+    displayTitle.textContent = "No track detected";
+    displayArtist.textContent = "Play music on JioSaavn";
+    statusDiv.textContent = "Waiting for audio playback...";
     statusDiv.style.color = "#94a3b8";
   }
 });
