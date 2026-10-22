@@ -1,15 +1,17 @@
+
 # JioSaavn Audio Downloader (Chrome Extension)
 
-A lightweight Manifest V3 Chrome Extension that intercepts active JioSaavn audio streams, handles the required referer headers, validates file integrity (`ftyp` MP4 atom), and downloads full-length audio files on demand.
+A lightweight Manifest V3 Chrome Extension that intercepts active JioSaavn audio streams, extracts clean track and artist metadata, injects required referer headers, validates container integrity (`ftyp` MP4 atom), and downloads full-length audio tracks directly to your device.
 
 ---
 
 ## Features
 
-* **On-Demand Downloading**: Download tracks only when clicking the popup button—no accidental automatic downloads.
-* **Referer Header Management**: Uses Chrome's `declarativeNetRequest` API to route stream requests with `[https://www.jiosaavn.com/](https://www.jiosaavn.com/)` headers to bypass CDN blocking.
-* **Integrity Verification**: Checks HTTP response headers, content types, byte lengths, and validates the MP4 container structure (`ftyp` signature) before writing to disk.
-* **Zero External Dependencies**: Pure browser JavaScript (Manifest V3 Service Worker + Popup UI).
+- **On-Demand Single-Click Download**: Download tracks only when you click the popup button—no background clutter or accidental automatic downloads.
+- **Smart Metadata & Clean Naming**: Automatically extracts track title and primary artist name from JioSaavn player controls and discards long comma-separated credits (e.g., saves cleanly as `Artist - Song.mp4`).
+- **CDN Referer Bypass**: Uses Chrome's `declarativeNetRequest` API to transparently attach `Referer: https://www.jiosaavn.com/` headers to stream requests, preventing 403 Forbidden CloudFront blocks.
+- **Integrity & MP4 Verification**: Validates HTTP status, rejects incomplete chunk ranges, and inspects byte offsets for the `ftyp` box before committing writes to disk.
+- **Zero External Dependencies**: Pure vanilla JavaScript (Manifest V3 Service Worker, Content Script, and Popup UI).
 
 ---
 
@@ -17,54 +19,76 @@ A lightweight Manifest V3 Chrome Extension that intercepts active JioSaavn audio
 
 ```text
 jiosaavn-downloader/
-├── manifest.json      # Extension configuration and permissions
+├── manifest.json      # Extension permissions and component registration
 ├── background.js     # Background service worker & network sniffer
-├── popup.html        # Clean extension popup interface
-├── popup.js          # UI controller & background messaging
+├── content.js        # DOM metadata scraper for JioSaavn player
+├── popup.html        # Extension UI layout
+├── popup.js          # UI controller & messaging logic
 └── README.md
 
-```
+
 
 ---
 
-## Installation & Setup
+## How to Install the Extension in Google Chrome
 
-1. **Clone or Download the Project**:
+Follow these steps to load the extension as an unpacked developer package:
+
+### Step 1: Get the Code
+
+* **Option A (Git Clone):**
 ```bash
-git clone https://github.com/DevRajivSharma/jiosaavn-downloader.git
-cd jiosaavn-downloader
+git clone [https://github.com/DevRajivSharma/jiosaavn-downloader.git](https://github.com/DevRajivSharma/jiosaavn-downloader.git)
 
 ```
 
 
-2. **Load into Google Chrome**:
-* Open Chrome and navigate to `chrome://extensions/`.
-* Enable **Developer mode** using the toggle switch in the top-right corner.
-* Click the **Load unpacked** button.
-* Select the `jiosaavn-downloader` directory containing `manifest.json`.
+* **Option B (ZIP Download):**
+Click **Code** > **Download ZIP** on GitHub, then extract the `.zip` archive to a folder on your computer.
 
+### Step 2: Open Chrome Extensions
 
+1. Launch Google Chrome.
+2. Enter `chrome://extensions/` in the URL address bar and press **Enter**.
+*(Alternatively, click the **three dots menu (⋮)** in the top-right corner > **Extensions** > **Manage Extensions**).*
+
+### Step 3: Enable Developer Mode
+
+* In the top-right corner of the Extensions page, toggle the **Developer mode** switch to **ON**.
+
+### Step 4: Load Unpacked Folder
+
+1. Click the **Load unpacked** button in the top-left toolbar.
+2. In the file picker, select the `jiosaavn-downloader` folder (the directory containing `manifest.json`).
+3. Click **Select Folder**. The extension will now appear in your installed extensions list.
+
+### Step 5: Pin the Extension (Recommended)
+
+1. Click the **Puzzle piece icon (Extensions)** in Chrome's top-right toolbar.
+2. Find **JioSaavn Downloader** and click the **Pin icon (📌)** next to it for quick access.
+
+> **Note on Code Changes:** Whenever you update or edit files (`background.js`, `content.js`, etc.), return to `chrome://extensions/` and click the **Reload (↻)** icon on the extension card, then refresh your JioSaavn tab.
 
 ---
 
-## How It Works
+## How to Use
 
-1. Open [JioSaavn](https://www.jiosaavn.com/) and play any track.
-2. The background worker detects the media CDN URL (`*[.saavncdn.com/*.mp4](https://.saavncdn.com/*.mp4)*`) and stores the active stream endpoint.
-3. Click the extension icon in your Chrome toolbar.
-4. Click **Download Song**.
-5. The extension retrieves the complete stream buffer, verifies the MP4 binary signature, converts it into a downloadable data stream, and saves it to your system under `Downloads/JioSaavn/`.
+1. Navigate to [JioSaavn](https://www.jiosaavn.com/) and refresh the page if it was already open.
+2. Play any song.
+3. Click the **JioSaavn Downloader** icon in your browser toolbar.
+4. The popup will display the detected song title and primary artist.
+5. Click **Download Track**. The file will be verified and saved to `Downloads/JioSaavn/`.
 
 ---
 
 ## Technical Details
 
 * **Manifest Version**: 3
-* **Network Rule Injection**: `declarativeNetRequest` attaches `Referer: [https://www.jiosaavn.com/](https://www.jiosaavn.com/)` dynamically to `saavncdn.com` media and XMLHttpRequests.
-* **Header & File Signature Check**:
-* Confirms `Content-Type: audio/mp4`.
-* Rejects partial fragment responses (`status 206` or `content-range` headers) to avoid incomplete files.
-* Inspects byte offsets `4` through `7` for ASCII value `ftyp`.
+* **Network Rule Injection**: `declarativeNetRequest` modifies request headers on matching `saavncdn.com` media endpoints.
+* **Byte Verification**:
+* Rejects `status 206` partial chunks to guarantee complete audio files.
+* Verifies ASCII string `ftyp` starting at byte offset `4`.
+* Encodes the audio buffer into a Data URL for safe handover to `chrome.downloads.download()`.
 
 
 
@@ -74,10 +98,11 @@ cd jiosaavn-downloader
 
 | Permission | Purpose |
 | --- | --- |
-| `webRequest` | Detects media CDN stream URLs while listening to tracks |
-| `declarativeNetRequest` | Sets origin and referer headers for CloudFront CDN acceptance |
-| `downloads` | Saves completed MP4 files directly to the local filesystem |
-| `host_permissions` | Grants network access to `*[.saavncdn.com/](https://.saavncdn.com/)*` and `*[.jiosaavn.com/](https://.jiosaavn.com/)*` |
+| `webRequest` | Detects media CDN stream URLs when audio starts playing |
+| `declarativeNetRequest` | Automatically applies required origin and referer headers |
+| `downloads` | Writes completed MP4 audio files to the local file system |
+| `tabs` | Communicates with active tabs to query track title and artist |
+| `host_permissions` | Grants network access to `*://*.saavncdn.com/*` and `*://www.jiosaavn.com/*` |
 
 ---
 
@@ -89,4 +114,8 @@ This project is licensed under the [MIT License](https://www.google.com/search?q
 
 ## Disclaimer
 
-This repository is for educational and research purposes only. All media content and trademarks belong to their respective copyright holders (JioSaavn / Reliance Industries). Ensure compliance with the platform's Terms of Service before using.
+This project is strictly for personal educational and research purposes. All media content and trademarks belong to their respective copyright holders (JioSaavn / Reliance Industries). Always respect copyright laws and the platform's Terms of Service.
+
+```
+
+```
