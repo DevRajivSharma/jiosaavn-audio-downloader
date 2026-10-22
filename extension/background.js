@@ -1,4 +1,4 @@
-// Rule: Ensure all outbound fetch calls to saavncdn have Referer: https://www.jiosaavn.com/
+// Rule: Ensure all fetch requests carry Referer: https://www.jiosaavn.com/
 chrome.runtime.onInstalled.addListener(() => {
   chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: [1001],
@@ -25,27 +25,15 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-const activeDownloads = new Set();
+let latestAudioUrl = null;
 
+// Intercept Saavn media CDN stream URLs without auto-downloading
 chrome.webRequest.onBeforeRequest.addListener(
   (details) => {
     const url = details.url;
-
-    // Filter Saavn media CDN mp4 stream requests
     if (url.includes(".mp4") && url.includes("saavncdn.com")) {
-      const baseUrl = url.split("?")[0];
-
-      // Avoid downloading the same song multiple times across chunk requests
-      if (activeDownloads.has(baseUrl)) {
-        return;
-      }
-      activeDownloads.add(baseUrl);
-
-      // Clean cache after 30 seconds so next replay can download if needed
-      setTimeout(() => activeDownloads.delete(baseUrl), 30000);
-
-      console.log("[JioSaavn Downloader] Intercepted stream URL:", url);
-      fetchAndSaveMP4(url);
+      latestAudioUrl = url;
+      console.log("[JioSaavn Downloader] Track URL ready:", latestAudioUrl);
     }
   },
   {
@@ -53,61 +41,68 @@ chrome.webRequest.onBeforeRequest.addListener(
   }
 );
 
+// Handle download requests initiated from the popup button
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "get_status") {
+    sendResponse({ hasTrack: Boolean(latestAudioUrl), url: latestAudioUrl });
+    return false;
+  }
+
+  if (message.action === "download_now") {
+    if (!latestAudioUrl) {
+      sendResponse({ success: false, error: "No song stream detected yet. Play a song first!" });
+      return false;
+    }
+
+    fetchAndSaveMP4(latestAudioUrl)
+      .then(() => sendResponse({ success: true }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+
+    return true; // Keeps channel open for async response
+  }
+});
+
 async function fetchAndSaveMP4(url) {
-  try {
-    console.log("[JioSaavn Downloader] Fetching stream with referer...");
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Referer: "https://www.jiosaavn.com/"
+    },
+    signal: AbortSignal.timeout(60000)
+  });
 
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Referer: "https://www.jiosaavn.com/"
-      },
-      signal: AbortSignal.timeout(60000)
-    });
+  const contentType = response.headers.get("content-type") ?? "";
+  const contentRange = response.headers.get("content-range");
 
-    const contentType = response.headers.get("content-type") ?? "";
-    const contentRange = response.headers.get("content-range");
-    const contentLength = response.headers.get("content-length");
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new Error(`HTTP ${response.status}`);
+  }
 
-    console.log("Status:", response.status);
-    console.log("Content-Type:", contentType);
-    console.log("Content-Length:", contentLength);
-    console.log("Content-Range:", contentRange);
+  if (!contentType.toLowerCase().startsWith("audio/mp4")) {
+    await response.body?.cancel();
+    throw new Error(`Unexpected type: ${contentType}`);
+  }
 
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new Error(`Request failed: HTTP ${response.status}`);
-    }
+  if (response.status === 206 || contentRange) {
+    throw new Error("Received partial chunk stream. Replay audio or try again.");
+  }
 
-    if (!contentType.toLowerCase().startsWith("audio/mp4")) {
-      await response.body?.cancel();
-      throw new Error(`Unexpected response type: ${contentType}`);
-    }
+  const arrayBuffer = await response.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
 
-    if (response.status === 206 || contentRange) {
-      console.warn("Partial response detected. Skipping fragment.");
-      return;
-    }
+  const ftyp = String.fromCharCode(bytes[4], bytes[5], bytes[6], bytes[7]);
+  if (bytes.length < 12 || ftyp !== "ftyp") {
+    throw new Error("Invalid MP4 file header ('ftyp' missing).");
+  }
 
-    const arrayBuffer = await response.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-    console.log("Downloaded bytes:", bytes.length);
+  const base64Data = uint8ArrayToBase64(bytes);
+  const dataUrl = `data:audio/mp4;base64,${base64Data}`;
 
-    // Validate MP4 'ftyp' box signature at byte offset 4-8
-    const ftyp = String.fromCharCode(bytes[4], bytes[5], bytes[6], bytes[7]);
-    if (bytes.length < 12 || ftyp !== "ftyp") {
-      console.error("The response does not have the standard MP4 file signature ('ftyp').");
-      return;
-    }
+  const pathname = new URL(url).pathname;
+  const fileName = pathname.substring(pathname.lastIndexOf("/") + 1) || "song.mp4";
 
-    // Convert to Base64 Data URL to pass straight to chrome.downloads
-    const base64Data = uint8ArrayToBase64(bytes);
-    const dataUrl = `data:audio/mp4;base64,${base64Data}`;
-
-    // Extract default file name from path
-    const pathname = new URL(url).pathname;
-    const fileName = pathname.substring(pathname.lastIndexOf("/") + 1) || "song.mp4";
-
+  return new Promise((resolve, reject) => {
     chrome.downloads.download({
       url: dataUrl,
       filename: `JioSaavn/${fileName}`,
@@ -115,22 +110,18 @@ async function fetchAndSaveMP4(url) {
       conflictAction: "uniquify"
     }, (downloadId) => {
       if (chrome.runtime.lastError) {
-        console.error("Download manager failed:", chrome.runtime.lastError.message);
+        reject(new Error(chrome.runtime.lastError.message));
       } else {
-        console.log(`Successfully saved MP4 as ${fileName} (Download ID: ${downloadId})`);
+        resolve(downloadId);
       }
     });
-
-  } catch (err) {
-    console.error("[JioSaavn Downloader] Error:", err.message);
-  }
+  });
 }
 
-// Helper to encode Uint8Array without blowing the call stack on large files
 function uint8ArrayToBase64(uint8) {
   let binary = "";
   const len = uint8.byteLength;
-  const chunkSize = 0x8000; // 32KB chunks
+  const chunkSize = 0x8000;
   for (let i = 0; i < len; i += chunkSize) {
     const chunk = uint8.subarray(i, Math.min(i + chunkSize, len));
     binary += String.fromCharCode.apply(null, chunk);
