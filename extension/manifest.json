@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "JioSaavn MP4 Downloader",
+  "version": "1.2",
+  "description": "Captures Saavn stream and lets you download via a popup button.",
+  "permissions": [
+    "webRequest",
+    "downloads",
+    "declarativeNetRequest"
+  ],
+  "host_permissions": [
+    "*://*.saavncdn.com/*",
+    "*://www.jiosaavn.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "JioSaavn Downloader"
+  }
+}
