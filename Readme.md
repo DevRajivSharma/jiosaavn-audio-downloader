@@ -17,7 +17,7 @@ A lightweight Manifest V3 Chrome Extension that intercepts active JioSaavn audio
 
 ## File Structure
 
-
+```
 jiosaavn-downloader/
 ├── manifest.json      # Extension permissions and component registration
 ├── background.js     # Background service worker & network sniffer
@@ -25,7 +25,7 @@ jiosaavn-downloader/
 ├── popup.html        # Extension UI layout
 ├── popup.js          # UI controller & messaging logic
 └── README.md
-
+```
 
 
 ---
@@ -38,7 +38,7 @@ Follow these steps to load the extension as an unpacked developer package:
 
 * **Option A (Git Clone):**
 ```bash
-git clone [https://github.com/DevRajivSharma/jiosaavn-downloader.git](https://github.com/DevRajivSharma/jiosaavn-downloader.git)
+git clone [https://github.com/DevRajivSharma/jiosaavn-audio-downloader.git](https://github.com/DevRajivSharma/jiosaavn-audio-downloaderr.git)
 
 ```
 
