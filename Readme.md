@@ -38,7 +38,7 @@ Follow these steps to load the extension as an unpacked developer package:
 
 * **Option A (Git Clone):**
 ```bash
-git clone [https://github.com/DevRajivSharma/jiosaavn-audio-downloader.git](https://github.com/DevRajivSharma/jiosaavn-audio-downloaderr.git)
+git clone https://github.com/DevRajivSharma/jiosaavn-audio-downloader.git
 
 ```
 
